@@ -28,10 +28,10 @@ def parse_args():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description='Video input pipeline demo')
     
-    # Source selection
-    source_group = parser.add_mutually_exclusive_group(required=True)
+    # Source selection - make it a mutually exclusive group but not required
+    source_group = parser.add_mutually_exclusive_group()
     source_group.add_argument('--webcam', type=int, default=0, 
-                            help='Webcam device index')
+                            help='Webcam device index (default: 0)')
     source_group.add_argument('--video', type=str, 
                             help='Path to video file')
     source_group.add_argument('--rtsp', type=str, 
@@ -71,18 +71,19 @@ def main():
     )
     
     # Create appropriate video source
-    if args.webcam is not None:
-        logger.info(f"Using webcam source (device {args.webcam})")
-        source = WebcamSource(device_index=args.webcam)
-    elif args.video:
+    if args.video:
         if not os.path.exists(args.video):
             logger.error(f"Video file not found: {args.video}")
             return
         logger.info(f"Using video file source: {args.video}")
         source = FileSource(args.video)
-    else:  # args.rtsp
+    elif args.rtsp:
         logger.info(f"Using RTSP stream source: {args.rtsp}")
         source = RTSPSource(args.rtsp)
+    else:
+        # Default to webcam
+        logger.info(f"Using webcam source (device {args.webcam})")
+        source = WebcamSource(device_index=args.webcam)
     
     # Create pipeline
     pipeline = VideoPipeline(
