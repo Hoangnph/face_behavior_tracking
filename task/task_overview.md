@@ -14,10 +14,10 @@ This document serves as the central task tracker for implementing the human iden
 
 ### 2. Video Input Pipeline
 - [View camera pipeline test plan](test_camera_pipeline.md)
-- [ ] Implement camera access module
-- [ ] Create video file loading functionality
-- [ ] Develop frame processing pipeline
-- [ ] Add RTSP stream support
+- [x] Implement camera access module
+- [x] Create video file loading functionality
+- [x] Develop frame processing pipeline
+- [x] Add RTSP stream support
 
 ### 3. Detection Module
 - [View detection models test plan](test_detection_models.md)
@@ -80,7 +80,7 @@ This document serves as the central task tracker for implementing the human iden
 | Component | Status | Completion % | Notes |
 |-----------|--------|--------------|-------|
 | Environment Setup | Completed | 100% | Core libraries and testing tools installed. ByteTrack installation is pending but marked as optional. |
-| Video Input Pipeline | Not Started | 0% | |
+| Video Input Pipeline | Completed | 100% | All tasks completed. |
 | Detection Module | Not Started | 0% | |
 | Tracking Module | Not Started | 0% | |
 | Pose Estimation | Not Started | 0% | |
