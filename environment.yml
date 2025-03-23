@@ -1,0 +1,24 @@
+name: human_tracking
+channels:
+  - conda-forge
+  - pytorch
+  - defaults
+dependencies:
+  - python=3.9
+  - opencv
+  - numpy
+  - matplotlib
+  - pytorch
+  - torchvision
+  # cudatoolkit removed for macOS compatibility
+  - pip
+  - pip:
+    - mediapipe
+    - onnxruntime  # CPU version for macOS
+    - ultralytics  # for YOLOv8
+    - fastapi
+    - uvicorn
+    - cython
+    - lap  # for Linear Assignment Problem solver
+    - pytest  # for testing
+    # ByteTrack will be installed from Git 

@@ -8,16 +8,16 @@ This document serves as the central task tracker for implementing the human iden
 
 ### 1. Environment Setup
 - [View detailed setup instructions and tests](test_setup.md)
-- [ ] Set up development environment with required dependencies
-- [ ] Install and configure core libraries (OpenCV, NumPy, MediaPipe)
-- [ ] Setup testing frameworks and validation tools
+- [x] Set up development environment with required dependencies in conda
+- [x] Install and configure core libraries (OpenCV, NumPy, MediaPipe)
+- [x] Setup testing frameworks and validation tools
 
 ### 2. Video Input Pipeline
 - [View camera pipeline test plan](test_camera_pipeline.md)
-- [ ] Implement camera access module
-- [ ] Create video file loading functionality
-- [ ] Develop frame processing pipeline
-- [ ] Add RTSP stream support
+- [x] Implement camera access module
+- [x] Create video file loading functionality
+- [x] Develop frame processing pipeline
+- [x] Add RTSP stream support
 
 ### 3. Detection Module
 - [View detection models test plan](test_detection_models.md)
@@ -79,8 +79,8 @@ This document serves as the central task tracker for implementing the human iden
 
 | Component | Status | Completion % | Notes |
 |-----------|--------|--------------|-------|
-| Environment Setup | Not Started | 0% | |
-| Video Input Pipeline | Not Started | 0% | |
+| Environment Setup | Completed | 100% | Core libraries and testing tools installed. ByteTrack installation is pending but marked as optional. |
+| Video Input Pipeline | Completed | 100% | All tasks completed. |
 | Detection Module | Not Started | 0% | |
 | Tracking Module | Not Started | 0% | |
 | Pose Estimation | Not Started | 0% | |
@@ -92,4 +92,4 @@ This document serves as the central task tracker for implementing the human iden
 
 ## Getting Started
 
-Begin with the [Test Setup](test_setup.md) to prepare your development environment, then proceed through the implementation plan in the order presented above. Use the linked test plans to guide your implementation and verification process. 
+Begin with the [Environment Setup Guide](../docs/environment_setup.md) to prepare your development environment, then proceed through the implementation plan in the order presented above. Use the linked test plans to guide your implementation and verification process. 
