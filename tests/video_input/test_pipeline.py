@@ -51,6 +51,10 @@ class MockVideoSource(VideoSource):
     
     def get_properties(self):
         return self.props
+        
+    def close(self):
+        """Override to properly set is_opened to False."""
+        self.is_opened = False
 
 
 class TestVideoPipeline:
