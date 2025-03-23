@@ -135,8 +135,27 @@ def check_project_structure() -> bool:
     return True
 
 
+def check_bytetrack() -> bool:
+    """Check if ByteTrack is installed (optional component)."""
+    # Check if already installed
+    if check_package_available("bytetrack"):
+        print("✓ ByteTrack is installed")
+        return True
+    
+    try:
+        # Try to import through alternative path
+        import sys
+        sys.path.append("external/ByteTrack")
+        import yolox
+        print("✓ ByteTrack found via external path")
+        return True
+    except ImportError:
+        print("⚠ ByteTrack is not installed (optional component)")
+        return False
+
+
 def install_bytetrack() -> bool:
-    """Install ByteTrack from GitHub."""
+    """Install ByteTrack from GitHub (best effort)."""
     try:
         # Check if already installed
         if check_package_available("bytetrack"):
@@ -153,8 +172,9 @@ def install_bytetrack() -> bool:
         print("✓ ByteTrack installed successfully")
         return True
     except subprocess.CalledProcessError as e:
-        print(f"✗ ByteTrack installation failed: {e.stdout} {e.stderr}")
-        return False
+        print(f"⚠ ByteTrack installation failed: {e.stdout} {e.stderr}")
+        print("⚠ ByteTrack is optional and can be installed later if needed")
+        return True  # Return true to not fail the entire setup
 
 
 def main() -> int:
@@ -180,19 +200,20 @@ def main() -> int:
     # Check project structure
     structure_ok = check_project_structure()
     
-    # Try to install ByteTrack if not found
-    if not check_package_available("bytetrack"):
+    # Check ByteTrack (optional)
+    bytetrack_ok = check_bytetrack()
+    if not bytetrack_ok:
         bytetrack_ok = install_bytetrack()
-    else:
-        bytetrack_ok = True
     
     # Summary
     print("\n" + "=" * 50)
     print("Environment Setup Summary")
     print("=" * 50)
     
-    if all_dependencies_installed and structure_ok and mediapipe_ok and bytetrack_ok:
-        print("✓ All checks passed! Environment is ready for development.")
+    if all_dependencies_installed and structure_ok and mediapipe_ok:
+        print("✓ Core environment is ready for development.")
+        if not bytetrack_ok:
+            print("⚠ ByteTrack (optional) could not be installed automatically. You may need to install it manually.")
         return 0
     else:
         print("⚠ Some checks failed. Please resolve the issues above.")

@@ -10,11 +10,11 @@ dependencies:
   - matplotlib
   - pytorch
   - torchvision
-  - cudatoolkit=11.3  # Remove this line if using CPU only
+  # cudatoolkit removed for macOS compatibility
   - pip
   - pip:
     - mediapipe
-    - onnxruntime-gpu  # Change to onnxruntime for CPU only
+    - onnxruntime  # CPU version for macOS
     - ultralytics  # for YOLOv8
     - fastapi
     - uvicorn
