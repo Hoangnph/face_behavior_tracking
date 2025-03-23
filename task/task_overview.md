@@ -8,7 +8,7 @@ This document serves as the central task tracker for implementing the human iden
 
 ### 1. Environment Setup
 - [View detailed setup instructions and tests](test_setup.md)
-- [x] Set up development environment with required dependencies
+- [x] Set up development environment with required dependencies in conda
 - [x] Install and configure core libraries (OpenCV, NumPy, MediaPipe)
 - [x] Setup testing frameworks and validation tools
 
