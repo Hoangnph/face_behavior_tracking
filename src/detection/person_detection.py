@@ -56,16 +56,22 @@ class YOLOPersonDetector(BaseDetector):
     """
     def __init__(self, 
                  model_path: str = "models/yolo/yolov8n.pt",
-                 confidence_threshold: float = 0.5,
-                 device: Optional[str] = None):
+                 confidence_threshold: float = 0.15,  # Reduced further to improve detection rate
+                 device: Optional[str] = None,
+                 input_size: Tuple[int, int] = (640, 640),  # Using standard size for better accuracy
+                 size_factor: float = 0.75):  # Increased from 0.5 to 0.75 for better accuracy
         """
         Initialize YOLOv8 person detector.
         
         Args:
             model_path: Path to YOLOv8 model file.
             confidence_threshold: Minimum confidence threshold for detections.
+                                 Lower values increase detection rate at cost of more false positives.
             device: Device to run inference on ('cpu', 'cuda', 'mps', etc.).
                     If None, will use the best available device.
+            input_size: Input size for the model (width, height) to optimize performance.
+            size_factor: Scale factor to resize input images before detection (0.5 = half size).
+                        Lower values improve performance at cost of accuracy.
         """
         super().__init__(confidence_threshold=confidence_threshold)
         
@@ -78,6 +84,10 @@ class YOLOPersonDetector(BaseDetector):
         # Set device if provided
         if device:
             self.model.to(device)
+            
+        # Store input size for resizing
+        self.input_size = input_size
+        self.size_factor = size_factor
     
     def detect(self, image: np.ndarray) -> List[PersonDetection]:
         """
@@ -89,25 +99,119 @@ class YOLOPersonDetector(BaseDetector):
         Returns:
             List of PersonDetection objects.
         """
+        # Store original dimensions for scaling back
+        original_height, original_width = image.shape[:2]
+        
+        # Resize image by factor to improve performance
+        if self.size_factor != 1.0:
+            working_width = int(original_width * self.size_factor)
+            working_height = int(original_height * self.size_factor)
+            working_image = cv2.resize(image, (working_width, working_height))
+        else:
+            working_width, working_height = original_width, original_height
+            working_image = image
+        
+        # Prepare image for model
+        if (working_width, working_height) != self.input_size:
+            # Keep aspect ratio and resize
+            model_input = self._resize_with_aspect_ratio(working_image, self.input_size)
+        else:
+            model_input = working_image
+        
         # Run inference
-        results = self.model(image, verbose=False)
+        results = self.model(model_input, verbose=False)
         
         # Process results
-        return self._process_results(results, image)
+        detections = self._process_results(
+            results, 
+            original_width, 
+            original_height, 
+            working_width, 
+            working_height
+        )
+        
+        return detections
     
-    def _process_results(self, results, image: np.ndarray) -> List[PersonDetection]:
+    def _resize_with_aspect_ratio(self, image: np.ndarray, target_size: Tuple[int, int]) -> np.ndarray:
+        """
+        Resize image while maintaining aspect ratio.
+        
+        Args:
+            image: Input image
+            target_size: Target size (width, height)
+            
+        Returns:
+            Resized image
+        """
+        # Ensure target dimensions are integers
+        target_width, target_height = int(target_size[0]), int(target_size[1])
+        h, w = image.shape[:2]
+        
+        # Create output image with target size
+        canvas = np.zeros((target_height, target_width, 3), dtype=np.uint8)
+        
+        # If image exceeds target dimensions, scale down
+        if w > target_width or h > target_height:
+            # Calculate scale to fit inside target
+            scale = min(target_width / w, target_height / h)
+            new_width = int(w * scale)
+            new_height = int(h * scale)
+            
+            # Resize using direct resize (no need for canvas)
+            resized = cv2.resize(image, (new_width, new_height), interpolation=cv2.INTER_LINEAR)
+            
+            # Center on canvas
+            x_offset = (target_width - new_width) // 2
+            y_offset = (target_height - new_height) // 2
+            
+            # Copy resized image to canvas
+            canvas[y_offset:y_offset+new_height, x_offset:x_offset+new_width] = resized
+        else:
+            # Image is smaller, scale up
+            scale = min(target_width / w, target_height / h)
+            new_width = int(w * scale)
+            new_height = int(h * scale)
+            
+            # Resize using direct resize
+            resized = cv2.resize(image, (new_width, new_height), interpolation=cv2.INTER_LINEAR)
+            
+            # Center on canvas
+            x_offset = (target_width - new_width) // 2
+            y_offset = (target_height - new_height) // 2
+            
+            # Copy resized image to canvas
+            canvas[y_offset:y_offset+new_height, x_offset:x_offset+new_width] = resized
+            
+        return canvas
+    
+    def _process_results(
+        self, 
+        results, 
+        original_width: int, 
+        original_height: int,
+        working_width: int = None,
+        working_height: int = None
+    ) -> List[PersonDetection]:
         """
         Process YOLOv8 results into PersonDetection objects.
         
         Args:
             results: YOLOv8 results object.
-            image: Input image.
+            original_width: Original image width.
+            original_height: Original image height.
+            working_width: Width of image after initial resize.
+            working_height: Height of image after initial resize.
             
         Returns:
             List of PersonDetection objects.
         """
-        height, width = image.shape[:2]
         detections = []
+        
+        # Use working dimensions as default if not provided
+        if working_width is None:
+            working_width = original_width
+        if working_height is None:
+            working_height = original_height
         
         for result in results:
             # Get boxes
@@ -127,8 +231,41 @@ class YOLOPersonDetector(BaseDetector):
                 if conf < self.confidence_threshold:
                     continue
                 
-                # Get bounding box
-                x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
+                # Get bounding box in normalized coordinates
+                x1, y1, x2, y2 = map(float, box.xyxy[0].tolist())
+                
+                # Scale coordinates to working image size if necessary
+                input_width, input_height = self.input_size
+                if (working_width, working_height) != self.input_size:
+                    # Calculate scale and offsets
+                    scale = min(input_width / working_width, input_height / working_height)
+                    new_width = int(working_width * scale)
+                    new_height = int(working_height * scale)
+                    
+                    x_offset = (input_width - new_width) // 2
+                    y_offset = (input_height - new_height) // 2
+                    
+                    # Adjust coordinates to working image size
+                    x1 = (x1 - x_offset) / scale
+                    y1 = (y1 - y_offset) / scale
+                    x2 = (x2 - x_offset) / scale
+                    y2 = (y2 - y_offset) / scale
+                
+                # Scale back to original image size if necessary
+                if working_width != original_width or working_height != original_height:
+                    scale_x = original_width / working_width
+                    scale_y = original_height / working_height
+                    
+                    x1 *= scale_x
+                    y1 *= scale_y
+                    x2 *= scale_x
+                    y2 *= scale_y
+                
+                # Clip to image boundaries
+                x1 = max(0, min(original_width, int(x1)))
+                y1 = max(0, min(original_height, int(y1)))
+                x2 = max(0, min(original_width, int(x2)))
+                y2 = max(0, min(original_height, int(y2)))
                 
                 # Create detection
                 person_detection = PersonDetection(

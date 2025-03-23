@@ -334,7 +334,7 @@ def test_bytetrack_basic():
             
             # If person2 reappears (frame 30), we expect a new ID
             if i == 30:
-                continue
+                                continue
                 
             # Otherwise, IDs should be maintained
             for prev_id in prev_ids:

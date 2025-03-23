@@ -84,15 +84,27 @@ class ONNXDetector(BaseDetector):
         self.input_shape = self.inputs[0].shape
         
         # Set input size
-        if input_size is None and len(self.input_shape) >= 4:
-            # Use model's input shape if available
-            self.input_height = self.input_shape[2]
-            self.input_width = self.input_shape[3]
-        elif input_size is not None:
-            # Use provided input size
-            self.input_width, self.input_height = input_size
-        else:
-            # Default to 640x640 if shape is not available
+        try:
+            if input_size is None and len(self.input_shape) >= 4:
+                # Use model's input shape if available
+                # Sometimes these are symbolic dimensions, so handle potential errors
+                try:
+                    self.input_height = int(self.input_shape[2])
+                    self.input_width = int(self.input_shape[3])
+                except (ValueError, TypeError):
+                    # Fall back to default if conversion fails
+                    print(f"Could not parse input dimensions from {self.input_shape}, using defaults")
+                    self.input_height = 640
+                    self.input_width = 640
+            elif input_size is not None:
+                # Use provided input size
+                self.input_width = int(input_size[0])
+                self.input_height = int(input_size[1])
+            else:
+                # Default to 640x640 if shape is not available
+                self.input_width, self.input_height = 640, 640
+        except Exception as e:
+            print(f"Error setting input dimensions: {str(e)}, using defaults")
             self.input_width, self.input_height = 640, 640
         
         # Set class mapping
@@ -127,8 +139,20 @@ class ONNXDetector(BaseDetector):
         Returns:
             Preprocessed image tensor ready for inference.
         """
-        # Resize image
-        resized = cv2.resize(image, (self.input_width, self.input_height))
+        # Get image dimensions
+        if image.ndim == 2:  # Grayscale
+            h, w = image.shape
+            # Convert to 3 channels
+            image = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+        else:
+            h, w = image.shape[:2]
+        
+        # Ensure width and height are integers
+        target_width = int(self.input_width)
+        target_height = int(self.input_height)
+        
+        # Resize image with explicit width and height (not tuple)
+        resized = cv2.resize(image, (target_width, target_height), interpolation=cv2.INTER_LINEAR)
         
         # Convert BGR to RGB
         rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
@@ -242,4 +266,120 @@ class ONNXDetector(BaseDetector):
             text = f"{detection.label}: {detection.confidence:.2f}"
             cv2.putText(vis_image, text, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
         
-        return vis_image 
+        return vis_image
+
+    def _resize_with_aspect_ratio(self, image: np.ndarray, target_size: Tuple[int, int]) -> np.ndarray:
+        """
+        Resize image while maintaining aspect ratio.
+        
+        Args:
+            image: Input image as numpy array.
+            target_size: Target size (width, height).
+            
+        Returns:
+            Resized image with padding if necessary.
+        """
+        # Ensure target dimensions are integers
+        target_width, target_height = int(target_size[0]), int(target_size[1])
+        h, w = image.shape[:2]
+        
+        # Create output image with target size
+        canvas = np.zeros((target_height, target_width, 3), dtype=np.uint8)
+        
+        # If image exceeds target dimensions, scale down
+        if w > target_width or h > target_height:
+            # Calculate scale to fit inside target
+            scale = min(target_width / w, target_height / h)
+            new_width = int(w * scale)
+            new_height = int(h * scale)
+            
+            # Resize using direct resize
+            resized = cv2.resize(image, (new_width, new_height), interpolation=cv2.INTER_LINEAR)
+            
+            # Center on canvas
+            x_offset = (target_width - new_width) // 2
+            y_offset = (target_height - new_height) // 2
+            
+            # Copy resized image to canvas
+            canvas[y_offset:y_offset+new_height, x_offset:x_offset+new_width] = resized
+        else:
+            # Image is smaller, scale up
+            scale = min(target_width / w, target_height / h)
+            new_width = int(w * scale)
+            new_height = int(h * scale)
+            
+            # Resize using direct resize
+            resized = cv2.resize(image, (new_width, new_height), interpolation=cv2.INTER_LINEAR)
+            
+            # Center on canvas
+            x_offset = (target_width - new_width) // 2
+            y_offset = (target_height - new_height) // 2
+            
+            # Copy resized image to canvas
+            canvas[y_offset:y_offset+new_height, x_offset:x_offset+new_width] = resized
+            
+        return canvas
+
+
+if __name__ == "__main__":
+    # Test code for debugging ONNX detector
+    import sys
+    
+    if len(sys.argv) > 1:
+        image_path = sys.argv[1]
+    else:
+        # Use a test image if none provided
+        image_path = "data/faces/known_customers/customer1.jpg"
+    
+    # Create an ONNX detector if model exists
+    onnx_model_path = "models/onnx/yolov8n.onnx"
+    yolo_model_path = "models/yolo/yolov8n.pt"
+    
+    if not os.path.exists(onnx_model_path):
+        print(f"ONNX model not found at {onnx_model_path}")
+        print("Converting YOLOv8 model to ONNX format...")
+        os.makedirs(os.path.dirname(onnx_model_path), exist_ok=True)
+        convert_to_onnx(yolo_model_path, onnx_model_path)
+        print(f"ONNX model saved to {onnx_model_path}")
+    
+    # Load image
+    image = cv2.imread(image_path)
+    if image is None:
+        print(f"Error: Cannot load image from {image_path}")
+        sys.exit(1)
+    
+    # Create detector
+    detector = ONNXDetector(
+        model_path=onnx_model_path,
+        confidence_threshold=0.2,
+        class_mapping={0: "person"}
+    )
+    
+    # Test preprocessing
+    print("Testing image preprocessing...")
+    try:
+        input_tensor = detector._preprocess_image(image)
+        print(f"Preprocessed image shape: {input_tensor.shape}")
+    except Exception as e:
+        print(f"Error in preprocessing: {str(e)}")
+    
+    # Test detection
+    print("Testing detection...")
+    try:
+        detections = detector.detect(image)
+        print(f"Detected {len(detections)} objects")
+        for i, detection in enumerate(detections):
+            print(f"  {i+1}. {detection.label}: {detection.confidence:.2f}")
+    except Exception as e:
+        print(f"Error in detection: {str(e)}")
+    
+    # Test visualization
+    print("Testing visualization...")
+    try:
+        vis_image = detector.visualize(image, detections)
+        output_path = "data/output/onnx_test_output.jpg"
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        cv2.imwrite(output_path, vis_image)
+        print(f"Visualization saved to {output_path}")
+    except Exception as e:
+        print(f"Error in visualization: {str(e)}") 

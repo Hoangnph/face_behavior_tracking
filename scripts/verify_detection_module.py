@@ -118,9 +118,13 @@ class DetectionVerifier:
         self.face_detector = MediaPipeFaceDetector(min_detection_confidence=0.5)
         self.log("Face detector initialized")
         
-        # Person detector
-        self.person_detector = YOLOPersonDetector(confidence_threshold=0.5)
-        self.log("Person detector initialized")
+        # Person detector with optimized settings
+        self.person_detector = YOLOPersonDetector(
+            confidence_threshold=0.15,   # Reduced further to catch more persons
+            input_size=(640, 640),       # Using standard size for better accuracy
+            size_factor=0.75             # Balance between speed and accuracy
+        )
+        self.log("Person detector initialized with performance optimizations")
         
         # ONNX detector (if available)
         try:
@@ -137,7 +141,7 @@ class DetectionVerifier:
             
             self.onnx_detector = ONNXDetector(
                 model_path=onnx_model_path,
-                confidence_threshold=0.5,
+                confidence_threshold=0.15,  # Match YOLOv8 settings
                 class_mapping={0: "person"}
             )
             self.log("ONNX detector initialized")
