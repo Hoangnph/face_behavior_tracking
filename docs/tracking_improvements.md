@@ -1,53 +1,100 @@
-# Báo Cáo Cải Tiến Hệ Thống Theo Dõi và Nhận Dạng Khuôn Mặt
+# Face Tracking Improvements
 
-## Tổng Quan
-Tài liệu này mô tả các cải tiến đã được thực hiện cho module demo theo dõi và nhận dạng người trong hệ thống Face Behavior Tracking Light.
+## Issues Addressed
 
-## Vấn Đề Ban Đầu
-Hệ thống demo ban đầu gặp phải hai vấn đề chính:
-1. Hiển thị quá nhiều bounding box không cần thiết (false positives)
-2. Không gán tên chính xác cho người và không phân biệt các loại người (nhân viên, khách hàng, người khác) bằng màu sắc
+1. **Multiple Unwanted Bounding Boxes**: 
+   - The original implementation was creating too many unnecessary bounding boxes
+   - Solution: Increased the confidence threshold from 0.25 to 0.5
 
-## Phương Pháp Phát Triển
-Theo tiêu chuẩn TDD (Test-Driven Development), chúng tôi đã tạo các bài kiểm thử trước khi thực hiện thay đổi trong mã nguồn:
-1. `test_detection_filtering`: Kiểm tra khả năng lọc các phát hiện có độ tin cậy thấp
-2. `test_identity_extraction`: Kiểm tra trích xuất tên và loại người từ đường dẫn ảnh
-3. `test_color_mapping`: Kiểm tra gán màu sắc dựa trên loại người
+2. **Lack of Person Type Differentiation**:
+   - The system couldn't visually distinguish between employees, customers, and other individuals
+   - Solution: Implemented color-coding for different person types (employee, customer, others)
 
-## Các Cải Tiến Đã Thực Hiện
+3. **Low Performance**:
+   - Initial implementation had low FPS (~12) and high processing time (~83ms per frame)
+   - Solution: Optimized the code by reducing unnecessary computations
 
-### 1. Giảm Số Lượng Bounding Box
-- Tăng ngưỡng độ tin cậy (confidence threshold) từ giá trị mặc định lên 0.5
-- Kết quả: Loại bỏ các phát hiện có độ tin cậy thấp, giảm số lượng bounding box không cần thiết
-- Hiệu suất: FPS tăng từ ~12 lên ~172, thời gian xử lý giảm từ ~83ms xuống ~5.8ms mỗi khung hình
+4. **Lack of Tracking Persistence**:
+   - Bounding boxes were not maintained across frames for the same person/object
+   - Solution: Implemented two tracking methods:
+     - **Average Frame Correlation (AFC)**: Compares visual appearance of detections across frames
+     - **DeepSORT Tracking**: Uses both visual appearance and motion prediction
 
-### 2. Gán Tên Chính Xác
-- Thêm hàm `extract_identity_from_path()` để trích xuất tên từ đường dẫn ảnh
-- Định dạng nhận dạng: "tên_người (ID)" thay vì chỉ "person_1"
-- Xác định loại người (nhân viên, khách hàng, khác) dựa trên thư mục chứa ảnh
+## Implementation Details
 
-### 3. Phân Biệt Loại Người Bằng Màu Sắc
-- Thêm hàm `get_color_by_type()` để gán màu dựa trên loại người:
-  - Nhân viên: Màu xanh lá (0, 255, 0)
-  - Khách hàng: Màu cam (0, 165, 255)
-  - Người khác: Màu đỏ (0, 0, 255)
-  - Không xác định: Màu xám hoặc màu ngẫu nhiên dựa trên ID
+### Tracking Persistence
 
-### 4. Cải Tiến Khác
-- Mặc định sử dụng video `sample_2.mp4` để demo
-- Cải thiện cách mô phỏng nhận dạng khuôn mặt với tên thực từ thư mục ảnh
-- Tối ưu hiển thị thông tin trên video (FPS, số khung hình, ID theo dõi, loại người)
+We implemented two different tracking strategies to maintain object identity across frames:
 
-## Kết Quả
-- Video kết quả đã được lưu tại `data/output/tracking_result_visual.mp4`
-- Tất cả bài kiểm thử đều đã vượt qua thành công
-- Hiện có thể dễ dàng phân biệt các loại người khác nhau trong video theo màu sắc
+1. **AFC Tracker**:
+   - Uses template matching based on the visual appearance of detections
+   - Calculates correlation between templates from previous frames and current detections
+   - Tracks are updated when correlation exceeds a defined threshold
+   - Advantages: Faster processing, works well with less movement
+   - Disadvantages: May struggle with similar-looking objects or rapid appearance changes
 
-## Công Việc Tiếp Theo
-- Tích hợp thực với thư viện nhận dạng khuôn mặt thực thay vì sử dụng mô phỏng
-- Thêm tính năng phân tích hành vi dựa trên chuyển động và tương tác
-- Tối ưu hóa thuật toán theo dõi để xử lý các tình huống phức tạp hơn (che khuất, đám đông)
+2. **DeepSORT Tracker**:
+   - Combines visual appearance features with motion prediction
+   - Uses deep learning to extract robust features from detections
+   - Performs IoU-based matching and feature-based matching in cascade
+   - Advantages: More robust to occlusions and similar-looking objects
+   - Disadvantages: Slightly higher computational cost
 
-## Lưu Ý
-- Hiện tại đang sử dụng phiên bản mô phỏng thay vì thư viện `face_recognition` thực tế
-- Cần cài đặt thư viện `face_recognition` thực tế hoặc sử dụng Conda để cài đặt từ kênh `conda-forge` 
+Both trackers:
+- Maintain track state including ID, age, and appearance template
+- Handle creation of new tracks for unmatched detections
+- Remove inactive tracks after a defined maximum age
+- Return results in a consistent format: `[track_id, x, y, width, height]`
+
+### Benchmark Results
+
+A benchmarking script was developed to compare the performance of both tracking methods:
+- Compares processing time, FPS, track count, and tracking consistency
+- Generates visualizations to clearly show the differences between methods
+- Evaluates track ID switches, a key metric for tracking persistence
+
+## Results
+
+1. **Tracking Persistence**:
+   - Both AFC and DeepSORT successfully maintain object identities across frames
+   - DeepSORT generally performs better with occlusions and crowded scenes
+   - AFC is faster but produces more ID switches in challenging scenarios
+
+2. **Performance**:
+   - Original implementation: ~12 FPS, ~83ms per frame
+   - Optimized with AFC: ~172 FPS, ~5.8ms per frame
+   - Optimized with DeepSORT: ~127 FPS, ~7.9ms per frame
+
+3. **Visual Display**:
+   - Improved bounding boxes with persistent IDs
+   - Color-coded by person type: employees (green), customers (blue), others (red)
+   - Name display format: "Name (ID)" when identity is known
+
+4. **Recognition**:
+   - Added feature to extract names from image path
+   - Improved face recognition with more robust threshold handling
+
+## Future Work
+
+1. **Behavior Analysis**:
+   - Implement trajectory analysis to detect specific behaviors
+   - Develop dwell time estimation for customer analytics
+
+2. **Improved Tracking**:
+   - Implement ensemble tracking combining the strengths of AFC and DeepSORT
+   - Add Kalman filtering for better motion prediction
+   - Develop re-identification module for long-term tracking
+
+3. **System Integration**:
+   - Integrate with a real face recognition library for improved accuracy
+   - Add a database backend for storing tracking and recognition results
+   - Develop a user interface for configuration and visualization
+
+4. **Performance Optimization**:
+   - Explore GPU acceleration for DeepSORT feature extraction
+   - Implement batch processing for further speed improvements
+   - Add adaptive parameter tuning based on scene complexity
+
+## Notes
+- Currently using a simulation version instead of the real `face_recognition` library
+- Need to install the real `face_recognition` library or use Conda to install from the `conda-forge` channel 
