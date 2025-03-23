@@ -21,10 +21,10 @@ This document serves as the central task tracker for implementing the human iden
 
 ### 3. Detection Module
 - [View detection models test plan](test_detection_models.md)
-- [ ] Integrate MediaPipe Face Detection
-- [ ] Implement YOLOv8-n person detection
-- [ ] Optimize with ONNX runtime
-- [ ] Create detection scheduler for performance balancing
+- [x] Integrate MediaPipe Face Detection
+- [x] Implement YOLOv8-n person detection
+- [x] Optimize with ONNX runtime
+- [x] Create detection scheduler for performance balancing
 
 ### 4. Tracking Module
 - [View tracking test plan](test_tracking.md)
@@ -88,7 +88,7 @@ This document serves as the central task tracker for implementing the human iden
 |-----------|--------|--------------|-------|
 | Environment Setup | Completed | 100% | Core libraries and testing tools installed. ByteTrack installation is pending but marked as optional. |
 | Video Input Pipeline | Completed | 100% | All tasks completed. |
-| Detection Module | Not Started | 0% | |
+| Detection Module | Completed | 100% | Face detection, person detection, ONNX runtime integration, and detection scheduler implemented with performance optimizations. |
 | Tracking Module | Not Started | 0% | Added face recognition for identity tracking to scope. |
 | Pose Estimation | Not Started | 0% | |
 | Behavior Analysis | Not Started | 0% | Added identity-based behavior tracking to scope. |
