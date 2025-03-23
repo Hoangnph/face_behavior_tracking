@@ -6,11 +6,15 @@ Usage:
     python scripts/demo_detection.py --webcam
     python scripts/demo_detection.py --video PATH_TO_VIDEO
     python scripts/demo_detection.py --image PATH_TO_IMAGE
+    python scripts/demo_detection.py --sample-faces  # Use sample faces from data/faces
+    python scripts/demo_detection.py --sample-video  # Use sample video from data/videos/sample_2.mp4
 
 Options:
     --webcam           Use webcam as input source
     --video PATH       Path to video file
     --image PATH       Path to image file
+    --sample-faces     Use sample faces from data/faces directory
+    --sample-video     Use sample video from data/videos/sample_2.mp4
     --face             Enable face detection
     --person           Enable person detection
     --onnx             Use ONNX runtime for person detection
@@ -24,13 +28,15 @@ import os
 import sys
 import argparse
 import time
+import glob
 import cv2
 import numpy as np
 from src.video_input import WebcamSource, FileSource, FrameProcessor, VideoPipeline
 from src.detection import (
     MediaPipeFaceDetector, FaceDetection,
     YOLOPersonDetector, PersonDetection,
-    ONNXDetector, convert_to_onnx
+    ONNXDetector, convert_to_onnx,
+    DetectionScheduler
 )
 
 
@@ -43,6 +49,8 @@ def parse_args():
     input_group.add_argument('--webcam', action='store_true', help='Use webcam as input source')
     input_group.add_argument('--video', type=str, help='Path to video file')
     input_group.add_argument('--image', type=str, help='Path to image file')
+    input_group.add_argument('--sample-faces', action='store_true', help='Use sample faces from data/faces directory')
+    input_group.add_argument('--sample-video', action='store_true', help='Use sample video from data/videos/sample_2.mp4')
     
     # Detection options
     parser.add_argument('--face', action='store_true', help='Enable face detection')
@@ -53,6 +61,7 @@ def parse_args():
     # Output options
     parser.add_argument('--display', action='store_true', help='Display detection results')
     parser.add_argument('--output', type=str, help='Save output to file')
+    parser.add_argument('--output-dir', type=str, default='data/output', help='Directory to save output files')
     
     args = parser.parse_args()
     
@@ -67,6 +76,13 @@ def parse_args():
 def main():
     """Main function."""
     args = parse_args()
+    
+    # Set up default paths
+    if args.sample_video:
+        args.video = "data/videos/sample_2.mp4"
+        if not os.path.exists(args.video):
+            print(f"Error: Sample video not found at {args.video}")
+            return 1
     
     # Initialize detectors
     detectors = {}
@@ -101,6 +117,19 @@ def main():
         
         detectors['person'] = person_detector
     
+    # Initialize detection scheduler if multiple detectors are used
+    if len(detectors) > 1:
+        scheduler = DetectionScheduler(
+            detectors=detectors,
+            default_detector="face" if "face" in detectors else "person"
+        )
+        print("Detection scheduler initialized")
+    
+    # Process sample faces if requested
+    if args.sample_faces:
+        process_sample_faces(detectors, args)
+        return 0
+    
     # Create video source
     if args.webcam:
         source = WebcamSource(device_index=0)
@@ -121,7 +150,12 @@ def main():
     
     # Create video pipeline
     with VideoPipeline(source, processor) as pipeline:
+        # Create output directory if needed
+        if args.output:
+            os.makedirs(os.path.dirname(args.output), exist_ok=True)
+            
         frame_count = 0
+        processed_count = 0
         start_time = time.time()
         
         while True:
@@ -131,48 +165,61 @@ def main():
             
             frame_count += 1
             
-            # Skip frames if processing is slow (every 2nd frame)
-            if frame_count % 2 != 0 and not args.webcam:
-                continue
+            # Skip frames if processing is slow (every 3rd frame for sample_2 which is larger)
+            should_process = args.webcam or frame_count % 3 == 0
             
-            # Process frame with detectors
-            processed_frame = process_frame(frame, detectors)
-            
-            # Display result
-            if args.display:
-                cv2.imshow('Detection Demo', processed_frame)
-                if cv2.waitKey(1) & 0xFF == ord('q'):
-                    break
-            
-            # Save output if specified
-            if args.output:
-                if args.video or args.webcam:
-                    # For video sources, initialize video writer on first frame
-                    if not hasattr(main, 'video_writer'):
-                        fps = source.get_properties().get('fps', 30)
-                        h, w = processed_frame.shape[:2]
-                        main.video_writer = cv2.VideoWriter(
-                            args.output,
-                            cv2.VideoWriter_fourcc(*'mp4v'),
-                            fps,
-                            (w, h)
-                        )
+            if should_process:
+                processed_count += 1
+                
+                # Process frame with detectors
+                if len(detectors) > 1 and 'scheduler' in locals():
+                    # Use scheduler for multiple detectors
+                    all_detections = scheduler.detect_all(frame)
+                    processed_frame = frame.copy()
                     
-                    main.video_writer.write(processed_frame)
+                    # Visualize detections based on their type
+                    for detector_name, detector in detectors.items():
+                        relevant_detections = [d for d in all_detections if d.label == detector_name or 
+                                             (detector_name == 'person' and d.label == 'person') or
+                                             (detector_name == 'face' and d.label == 'face')]
+                        processed_frame = detector.visualize(processed_frame, relevant_detections)
                 else:
-                    # For single image
-                    cv2.imwrite(args.output, processed_frame)
+                    # Process with individual detectors
+                    processed_frame = process_frame(frame, detectors)
+                
+                # Display result
+                if args.display:
+                    cv2.imshow('Detection Demo', processed_frame)
+                    if cv2.waitKey(1) & 0xFF == ord('q'):
+                        break
+                
+                # Save output if specified
+                if args.output:
+                    if args.video or args.webcam:
+                        # For video sources, initialize video writer on first frame
+                        if not hasattr(main, 'video_writer'):
+                            fps = source.get_properties().get('fps', 30)
+                            h, w = processed_frame.shape[:2]
+                            main.video_writer = cv2.VideoWriter(
+                                args.output,
+                                cv2.VideoWriter_fourcc(*'mp4v'),
+                                fps,
+                                (w, h)
+                            )
+                        
+                        main.video_writer.write(processed_frame)
         
         # Print performance statistics
         elapsed_time = time.time() - start_time
-        fps = frame_count / elapsed_time
-        print(f"Processed {frame_count} frames in {elapsed_time:.2f} seconds ({fps:.2f} FPS)")
+        fps = processed_count / elapsed_time
+        print(f"Processed {processed_count} frames out of {frame_count} in {elapsed_time:.2f} seconds ({fps:.2f} FPS)")
     
     # Clean up
     cv2.destroyAllWindows()
     if hasattr(main, 'video_writer'):
         main.video_writer.release()
     
+    print("Testing completed successfully!")
     return 0
 
 
@@ -208,8 +255,74 @@ def process_single_image(image, detectors, args):
     
     # Save output if specified
     if args.output:
+        os.makedirs(os.path.dirname(args.output), exist_ok=True)
         cv2.imwrite(args.output, processed_image)
         print(f"Output saved to {args.output}")
+
+
+def process_sample_faces(detectors, args):
+    """Process sample faces from the data/faces directory."""
+    # Define paths
+    face_dirs = [
+        "data/faces/known_customers",
+        "data/faces/employees"
+    ]
+    
+    # Create output directory
+    output_dir = args.output_dir or "data/output/faces"
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # Get all face images
+    face_images = []
+    for directory in face_dirs:
+        if os.path.exists(directory):
+            for ext in ['*.jpg', '*.jpeg', '*.png']:
+                face_images.extend(glob.glob(os.path.join(directory, '**', ext), recursive=True))
+    
+    if not face_images:
+        print("No face images found in the specified directories")
+        return
+    
+    print(f"Found {len(face_images)} face images to process")
+    
+    # Process each face image
+    success_count = 0
+    for i, image_path in enumerate(face_images):
+        # Load image
+        image = cv2.imread(image_path)
+        if image is None:
+            print(f"Error: Cannot load image from {image_path}")
+            continue
+        
+        # Process image
+        try:
+            processed_image = process_frame(image, detectors)
+            
+            # Save output
+            rel_path = os.path.relpath(image_path, "data/faces")
+            output_path = os.path.join(output_dir, rel_path)
+            os.makedirs(os.path.dirname(output_path), exist_ok=True)
+            cv2.imwrite(output_path, processed_image)
+            
+            # Display progress
+            success_count += 1
+            if i % 10 == 0:
+                print(f"Processed {i+1}/{len(face_images)} images")
+                
+                # Display result periodically if requested
+                if args.display and i < 20:  # Only show first 20 to avoid overwhelming display
+                    cv2.imshow(f'Face Detection - {os.path.basename(image_path)}', processed_image)
+                    cv2.waitKey(500)  # Show for 500ms
+                    cv2.destroyAllWindows()
+                    
+        except Exception as e:
+            print(f"Error processing {image_path}: {str(e)}")
+    
+    print(f"Successfully processed {success_count}/{len(face_images)} face images")
+    print(f"Results saved to {output_dir}")
+    
+    # Clean up
+    cv2.destroyAllWindows()
 
 
 if __name__ == '__main__':
