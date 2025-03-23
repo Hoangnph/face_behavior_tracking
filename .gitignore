@@ -11,6 +11,9 @@ datasets/
 *.pt
 *.onnx
 
+# Exception for specific model files that need to be in the repo
+!models/yolo/yolov8n.pt
+
 # Python
 __pycache__/
 *.py[cod]
